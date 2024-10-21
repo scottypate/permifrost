@@ -1870,7 +1870,7 @@ class SnowflakeGrantsGenerator:
 
     def _generate_ownership_grant_table(self, role, table_refs) -> List[Dict]:
         sql_commands = []
-        schemas = []
+        schemas = []  # type: List[str]
         tables = []
 
         for table in table_refs:
