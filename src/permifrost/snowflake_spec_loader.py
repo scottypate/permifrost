@@ -17,7 +17,7 @@ class SnowflakeSpecLoader:
     def __init__(
         self,
         spec_path: str,
-        conn: SnowflakeConnector,
+        conn: Optional[SnowflakeConnector] = None,
         roles: Optional[List[str]] = None,
         users: Optional[List[str]] = None,
         run_list: Optional[List[str]] = None,

@@ -696,6 +696,9 @@ class TestSnowflakeSpecLoader:
 
     @patch("concurrent.futures.ThreadPoolExecutor", side_effect=mock_tpe)
     def test_snowflake_spec_loader_with_tpe(mock_tpe, mock_connector):
+        """
+        Check tpe creation
+        """
         loader = SnowflakeSpecLoader(mock_connector)
 
         # Assert that loader.tpe is an instance of ThreadPoolExecutor
