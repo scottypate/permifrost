@@ -1576,6 +1576,9 @@ class TestGenerateSchemaGrants:
         # Sort list of SQL queries for readability
         schemas_list_sql.sort()
 
+        print(expected)
+        print(schemas_list_sql)
+
         assert schemas_list_sql == expected
 
 

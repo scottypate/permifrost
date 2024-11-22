@@ -23,7 +23,7 @@ for logger_name in ["snowflake.connector", "bot", "boto3"]:
 
 
 class SnowflakeConnector:
-    def __init__(self, config: Optional[Dict] = None, pool_size: int = 32) -> None:
+    def __init__(self, config: Optional[Dict] = None, pool_size: int = 1) -> None:
         self._connection = None
         self._engine_kwargs = {"pool_size": pool_size, "max_overflow": 0}
         if not config:
