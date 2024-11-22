@@ -1,6 +1,6 @@
 # `permifrost`
 
-We welcome contributions, so please feel free to submit MRs or [issues](https://gitlab.com/gitlab-data/permifrost/-/issues/new) if you'd like to help in any way. To get started with contributions read the [Contributing](#contributing) section at the bottom of this README to get started.
+We welcome contributions, so please feel free to submit MRs or [issues](https://gitlab.com/gitlab-data/permifrost/-/issues/new) if you'd like to help in any way. To get started with contributions read the [Contributing](#contributing) section at the bottom of this README to get started
 
 ## Installation
 
