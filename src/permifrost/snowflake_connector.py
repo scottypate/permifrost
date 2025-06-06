@@ -383,7 +383,7 @@ class SnowflakeConnector:
 
         if len(name_parts) == 0:
             warnings.warn(
-                f"Object identifier is Null",
+                "Object identifier is Null",
                 SyntaxWarning,
             )
 
