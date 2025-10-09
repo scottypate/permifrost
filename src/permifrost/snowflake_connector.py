@@ -268,7 +268,10 @@ class SnowflakeConnector:
         results = self.run_query(query).fetchall()
 
         for result in results:
-            roles.append(SnowflakeConnector.snowflaky(result["role"]))
+            if result.get("role") is not None:
+                roles.append(SnowflakeConnector.snowflaky(result["role"]))
+            else:
+                logger.warning(f"Found grant with NULL role for user {user}")
 
         return roles
 
