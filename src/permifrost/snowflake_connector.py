@@ -146,7 +146,11 @@ class SnowflakeConnector:
         results = self.run_query(query).fetchall()
 
         for result in results:
-            schema_identifier = f"{result['database_name']}.{result['name']}"
+            database_name = result['database_name']
+            schema_name = result['name']
+            if schema_name == schema_name.lower():
+                schema_name = f'"{schema_name}"'
+            schema_identifier = f"{database_name}.{schema_name}"
             names.append(SnowflakeConnector.snowflaky(schema_identifier))
 
         return names

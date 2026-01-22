@@ -64,7 +64,7 @@ class TestSnowflakeConnector:
             == 'database_1.schema_1."Case_Sensitive_Table_Name"'
         )
 
-        assert SnowflakeConnector.snowflaky(db13) == "database_1.schema_1.<table>"
+        assert SnowflakeConnector.snowflaky(db13) == 'database_1.schema_1.<table>'
 
         assert (
             SnowflakeConnector.snowflaky(db14) == 'database_1."1_LEADING_DIGIT".<table>'
@@ -186,6 +186,7 @@ class TestSnowflakeConnector:
                 {"database_name": "DATABASE_1", "name": "SCHEMA_1"},
                 {"database_name": "DATABASE_1", "name": "45_SCHEMA"},
                 {"database_name": "DATABASE_1", "name": "CaseSensitiveSchema"},
+                {"database_name": "DATABASE_1", "name": "schema"},
             ],
         )
 
@@ -198,6 +199,7 @@ class TestSnowflakeConnector:
             "database_1.schema_1",
             'database_1."45_SCHEMA"',
             'database_1."CaseSensitiveSchema"',
+            'database_1."schema"',
         ]
 
     def test_show_tables(self, mocker):
