@@ -178,7 +178,7 @@ class SnowflakeConnector:
             if table_name == table_name.lower():
                 table_name = f'"{table_name}"'
             table_identifier = (
-                f"{result['database_name']}.{result['schema_name']}.{result['name']}"
+                f"{database_name}.{schema_name}.{table_name}"
             )
             names.append(SnowflakeConnector.snowflaky(table_identifier))
 
