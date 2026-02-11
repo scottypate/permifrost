@@ -170,6 +170,13 @@ class SnowflakeConnector:
         results = self.run_query(query).fetchall()
 
         for result in results:
+            database_name = result["database_name"]
+            schema_name = result["schema_name"]
+            table_name = result["name"]
+            if schema_name == schema_name.lower():
+                schema_name = f'"{schema_name}"'
+            if table_name == table_name.lower():
+                table_name = f'"{table_name}"'
             table_identifier = (
                 f"{result['database_name']}.{result['schema_name']}.{result['name']}"
             )

@@ -225,6 +225,16 @@ class TestSnowflakeConnector:
                     "schema_name": "SCHEMA_1",
                     "name": "CaseSensitiveTable",
                 },
+                {
+                    "database_name": "DATABASE_1",
+                    "schema_name": "schema",
+                    "name": "table",
+                },
+                {
+                    "database_name": "DATABASE_1",
+                    "schema_name": "SCHEMA_1",
+                    "name": "table",
+                },
             ],
         )
 
@@ -237,6 +247,8 @@ class TestSnowflakeConnector:
             "database_1.schema_1.table_1",
             'database_1.schema_1."45_TABLE"',
             'database_1.schema_1."CaseSensitiveTable"',
+            'database_1."schema"."table"',
+            'database_1.schema_1."table"',
         ]
 
     def test_show_views(self, mocker):
