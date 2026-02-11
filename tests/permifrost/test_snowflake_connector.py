@@ -64,7 +64,7 @@ class TestSnowflakeConnector:
             == 'database_1.schema_1."Case_Sensitive_Table_Name"'
         )
 
-        assert SnowflakeConnector.snowflaky(db13) == 'database_1.schema_1.<table>'
+        assert SnowflakeConnector.snowflaky(db13) == "database_1.schema_1.<table>"
 
         assert (
             SnowflakeConnector.snowflaky(db14) == 'database_1."1_LEADING_DIGIT".<table>'
