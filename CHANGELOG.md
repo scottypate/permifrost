@@ -19,6 +19,9 @@ Changelog](http://keepachangelog.com/).
   
 ### Fixes
 
+- [#159](https://gitlab.com/gitlab-data/permifrost/-/merge_requests/159)
+  - Fix lowercase schema and table references
+
 ### Changes
 
 ## 0.15.4 - (2023-12-04)
