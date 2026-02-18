@@ -442,6 +442,44 @@ class SnowflakeConnector:
         return name
 
     @staticmethod
+    def normalize_identifier(name: str) -> str:
+        """
+        Normalize an identifier for comparison purposes.
+
+        Strips quotes and converts to lowercase to create a canonical form
+        that can be compared regardless of how Snowflake returns the identifier.
+
+        This is needed because Catalog-Linked Databases (Iceberg/Open Catalog)
+        return quoted identifiers in SHOW GRANTS but unquoted in SHOW SCHEMAS.
+
+        Examples:
+            'atlan_context_store."entity_history"' -> 'atlan_context_store.entity_history'
+            'ATLAN_CONTEXT_STORE.ENTITY_HISTORY' -> 'atlan_context_store.entity_history'
+            'atlan_context_store.entity_history' -> 'atlan_context_store.entity_history'
+            'DB."Schema"."Table"' -> 'db.schema.table'
+
+        Args:
+            name: The identifier to normalize (e.g., database.schema or database.schema.table)
+
+        Returns:
+            A normalized lowercase identifier with quotes stripped
+        """
+        if name is None:
+            return ""
+
+        parts = name.split(".")
+        normalized_parts = []
+
+        for part in parts:
+            # Strip surrounding quotes if present
+            if part.startswith('"') and part.endswith('"'):
+                part = part[1:-1]
+            # Convert to lowercase
+            normalized_parts.append(part.lower())
+
+        return ".".join(normalized_parts)
+
+    @staticmethod
     def reserved_keywords() -> Set[str]:
         return {
             "account",

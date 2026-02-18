@@ -134,8 +134,14 @@ class SnowflakeSpecLoader:
         error_messages = []
         if len(self.entities["schema_refs"]) > 0:
             schemas = conn.show_schemas()
+            # Create normalized set for comparison to handle Catalog-Linked Databases
+            # which return quoted identifiers in different contexts
+            normalized_schemas = {
+                SnowflakeConnector.normalize_identifier(s) for s in schemas
+            }
             for schema in self.entities["schema_refs"]:
-                if "*" not in schema and schema not in schemas:
+                normalized_schema = SnowflakeConnector.normalize_identifier(schema)
+                if "*" not in schema and normalized_schema not in normalized_schemas:
                     error_messages.append(
                         f"Missing Entity Error: Schema {schema} was not found on"
                         " Snowflake Server. Please create it before continuing."
@@ -149,13 +155,22 @@ class SnowflakeSpecLoader:
         error_messages = []
         if len(self.entities["table_refs"]) > 0:
             views = conn.show_views()
+            # Create normalized set for views to handle Catalog-Linked Databases
+            normalized_views = {
+                SnowflakeConnector.normalize_identifier(v) for v in views
+            }
             for db, tables in self.entities["tables_by_database"].items():
                 existing_tables = conn.show_tables(database=db)
+                # Create normalized set for tables to handle Catalog-Linked Databases
+                normalized_tables = {
+                    SnowflakeConnector.normalize_identifier(t) for t in existing_tables
+                }
                 for table in tables:
+                    normalized_table = SnowflakeConnector.normalize_identifier(table)
                     if (
                         "*" not in table
-                        and table not in existing_tables
-                        and table not in views
+                        and normalized_table not in normalized_tables
+                        and normalized_table not in normalized_views
                     ):
                         error_messages.append(
                             f"Missing Entity Error: Table/View {table} was not found on"

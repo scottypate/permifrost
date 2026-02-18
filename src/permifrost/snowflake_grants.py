@@ -62,13 +62,24 @@ class SnowflakeGrantsGenerator:
         is_granted_privilege('reporter', 'usage', 'database', 'analytics') -> True
         means that role reporter has been granted the privilege to use the
         Database ANALYTICS on the Snowflake server.
+
+        Uses normalized identifier comparison to handle Catalog-Linked Databases
+        which return quoted identifiers in SHOW GRANTS.
         """
 
         grants = (
             self.grants_to_role.get(role, {}).get(privilege, {}).get(entity_type, [])
         )
 
-        if SnowflakeConnector.snowflaky(entity_name) in grants:
+        # Use normalized comparison to handle Catalog-Linked Databases
+        normalized_entity = SnowflakeConnector.normalize_identifier(
+            SnowflakeConnector.snowflaky(entity_name)
+        )
+        normalized_grants = {
+            SnowflakeConnector.normalize_identifier(g) for g in grants
+        }
+
+        if normalized_entity in normalized_grants:
             return True
 
         return False
@@ -880,21 +891,43 @@ class SnowflakeGrantsGenerator:
     def _generate_schema_revokes(
         self, usage_schemas, all_grant_schemas, shared_dbs, spec_dbs, role
     ):
+        """
+        Generate REVOKE statements for schemas that are granted in Snowflake
+        but not defined in the spec.
+
+        Uses normalized identifier comparison to handle Catalog-Linked Databases
+        which return quoted identifiers in SHOW GRANTS.
+        """
         sql_commands = []
         read_privileges = "usage"
 
+        # Create normalized sets for comparison to handle Catalog-Linked Databases
+        normalized_grant_schemas = {
+            SnowflakeConnector.normalize_identifier(s) for s in all_grant_schemas
+        }
+        normalized_shared_dbs = {
+            SnowflakeConnector.normalize_identifier(db) for db in shared_dbs
+        }
+        normalized_spec_dbs = {
+            SnowflakeConnector.normalize_identifier(db) for db in spec_dbs
+        }
+
         for granted_schema in usage_schemas:
+            normalized_granted = SnowflakeConnector.normalize_identifier(granted_schema)
             database_name = granted_schema.split(".")[0]
+            normalized_db = SnowflakeConnector.normalize_identifier(database_name)
             future_schema_name = f"{database_name}.<schema>"
-            if granted_schema not in all_grant_schemas and (
-                database_name in shared_dbs or database_name not in spec_dbs
+            normalized_future = SnowflakeConnector.normalize_identifier(future_schema_name)
+
+            if normalized_granted not in normalized_grant_schemas and (
+                normalized_db in normalized_shared_dbs or normalized_db not in normalized_spec_dbs
             ):
                 # No privileges to revoke on imported db. Done at database level
                 # Don't revoke on privileges on databases not defined in spec.
                 continue
             elif (  # If future privilege is granted on snowflake but not in grant list
-                granted_schema == future_schema_name
-                and future_schema_name not in all_grant_schemas  #
+                normalized_granted == normalized_future
+                and normalized_future not in normalized_grant_schemas
             ):
                 sql_commands.append(
                     {
@@ -909,8 +942,8 @@ class SnowflakeGrantsGenerator:
                     }
                 )
             elif (
-                granted_schema not in all_grant_schemas
-                and future_schema_name not in all_grant_schemas
+                normalized_granted not in normalized_grant_schemas
+                and normalized_future not in normalized_grant_schemas
             ):
                 # Covers case where schema is granted in Snowflake
                 # But it's not in the grant list and it's not explicitly granted as a future grant
@@ -1568,12 +1601,29 @@ class SnowflakeGrantsGenerator:
         resource_type: Database object to revoke (i.e. table, view, etc.)
         granted_resources: List of GRANTS to filter through
 
+        Uses normalized identifier comparison to handle Catalog-Linked Databases
+        which return quoted identifiers in SHOW GRANTS.
+
         Returns a list of REVOKE statements
         """
         sql_commands = []
+
+        # Create normalized sets for comparison to handle Catalog-Linked Databases
+        normalized_grant_resources = {
+            SnowflakeConnector.normalize_identifier(r) for r in all_grant_resources
+        }
+        normalized_shared_dbs = {
+            SnowflakeConnector.normalize_identifier(db) for db in shared_dbs
+        }
+        normalized_spec_dbs = {
+            SnowflakeConnector.normalize_identifier(db) for db in spec_dbs
+        }
+
         for granted_resource in granted_resources:
+            normalized_granted = SnowflakeConnector.normalize_identifier(granted_resource)
             resource_split = granted_resource.split(".")
             database_name = resource_split[0]
+            normalized_db = SnowflakeConnector.normalize_identifier(database_name)
             schema_name = resource_split[1] if 1 < len(resource_split) else None
 
             # For future grants at the database level
@@ -1588,15 +1638,17 @@ class SnowflakeGrantsGenerator:
                 grouping_type = "schema"
                 grouping_name = f"{database_name}.{schema_name}"
 
-            if granted_resource not in all_grant_resources and (
-                database_name in shared_dbs or database_name not in spec_dbs
+            normalized_future = SnowflakeConnector.normalize_identifier(future_resource)
+
+            if normalized_granted not in normalized_grant_resources and (
+                normalized_db in normalized_shared_dbs or normalized_db not in normalized_spec_dbs
             ):
                 # No privileges to revoke on imported db. Done at database level
                 # Don't revoke on privileges on databases not defined in spec.
                 continue
             elif (
-                granted_resource == future_resource
-                and future_resource not in all_grant_resources
+                normalized_granted == normalized_future
+                and normalized_future not in normalized_grant_resources
             ):
                 # If future privilege is granted in Snowflake but not in grant list
                 sql_commands.append(
@@ -1612,8 +1664,8 @@ class SnowflakeGrantsGenerator:
                     }
                 )
             elif (
-                granted_resource not in all_grant_resources
-                and future_resource not in all_grant_resources
+                normalized_granted not in normalized_grant_resources
+                and normalized_future not in normalized_grant_resources
             ):
                 # Covers case where resource is granted in Snowflake
                 # But it's not in the grant list and it's not explicitly granted as a future grant

@@ -82,6 +82,68 @@ class TestSnowflakeConnector:
 
         assert SnowflakeConnector.snowflaky(db19) == ""
 
+    def test_normalize_identifier(self):
+        """
+        Test normalize_identifier for handling Catalog-Linked Database identifiers.
+
+        Catalog-Linked Databases (Iceberg/Open Catalog) return quoted identifiers
+        in SHOW GRANTS but unquoted in SHOW SCHEMAS. This function normalizes
+        identifiers to a canonical form for comparison.
+        """
+        # Basic lowercase conversion
+        assert (
+            SnowflakeConnector.normalize_identifier("DATABASE_1.SCHEMA_1")
+            == "database_1.schema_1"
+        )
+
+        # Quoted schema names (Catalog-Linked Database format from SHOW GRANTS)
+        assert (
+            SnowflakeConnector.normalize_identifier('ATLAN_CONTEXT_STORE."entity_history"')
+            == "atlan_context_store.entity_history"
+        )
+        assert (
+            SnowflakeConnector.normalize_identifier('atlan_context_store."entity_history"')
+            == "atlan_context_store.entity_history"
+        )
+
+        # Unquoted schema names (standard format from SHOW SCHEMAS)
+        assert (
+            SnowflakeConnector.normalize_identifier("atlan_context_store.entity_history")
+            == "atlan_context_store.entity_history"
+        )
+
+        # Three-part identifiers (database.schema.table)
+        assert (
+            SnowflakeConnector.normalize_identifier('DB."Schema"."Table"')
+            == "db.schema.table"
+        )
+        assert (
+            SnowflakeConnector.normalize_identifier("DATABASE.SCHEMA.TABLE")
+            == "database.schema.table"
+        )
+
+        # Mixed case with quotes
+        assert (
+            SnowflakeConnector.normalize_identifier('PROD_DB."Mixed_Case_Schema"')
+            == "prod_db.mixed_case_schema"
+        )
+
+        # Future grants format
+        assert (
+            SnowflakeConnector.normalize_identifier("database_1.<schema>")
+            == "database_1.<schema>"
+        )
+        assert (
+            SnowflakeConnector.normalize_identifier("DATABASE_1.<TABLE>")
+            == "database_1.<table>"
+        )
+
+        # None handling
+        assert SnowflakeConnector.normalize_identifier(None) == ""
+
+        # Empty string
+        assert SnowflakeConnector.normalize_identifier("") == ""
+
     def test_uses_oauth_if_available(self, mocker, snowflake_connector_env):
         mocker.patch("sqlalchemy.create_engine")
         os.environ["PERMISSION_BOT_OAUTH_TOKEN"] = "TEST"
