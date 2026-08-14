@@ -5,7 +5,9 @@
     DOCKERFILE: docker/base/Dockerfile
     IMAGE_NAME: $CI_REGISTRY_IMAGE/base
   before_script:
-    - export IMAGE_TAG=$CI_COMMIT_REF_NAME
+    # REF_SLUG, not REF_NAME: Docker tags cannot contain the `/` that appears in
+    # branch names like `fix/some-bug`.
+    - export IMAGE_TAG=$CI_COMMIT_REF_SLUG
 
 # the permifrost base should only be rebuild when the `requirements.txt` file
 # has a change, and should be inferable from the `BASE_SHA` environment
