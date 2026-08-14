@@ -1,0 +1,43 @@
+.sandbox:
+  stage: integration-test
+  image:
+    name: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    entrypoint: [""]
+  variables:
+    PERMIFROST_INTEGRATION_SPEC: sandbox/snowflake_spec.yml
+    # Set PERMISSION_BOT_KEY as a File-type CI variable holding the private key;
+    # GitLab exposes file variables as a path, which is what the connector wants.
+    PERMISSION_BOT_KEY_PATH: $PERMISSION_BOT_KEY
+  before_script:
+    - pip install '.[dev]'
+  # Nothing here can work without a configured service account, so these jobs
+  # stay out of the pipeline entirely until PERMISSION_BOT_ACCOUNT exists.
+  rules:
+    - if: $PERMISSION_BOT_ACCOUNT == null
+      when: never
+    - when: on_success
+
+# Read-only: validates that every entity the spec references exists on the
+# server, and that a plan can be generated. Safe on every branch.
+sandbox_spec_test:
+  extends: .sandbox
+  script:
+    - pytest -v -m integration -k "spec_test or dry_run"
+
+# Mutates the sandbox account, so it is manual and master-only. The convergence
+# assertion only means anything after a real apply, which is why it lives here.
+sandbox_apply:
+  extends: .sandbox
+  variables:
+    PERMIFROST_INTEGRATION_SPEC: sandbox/snowflake_spec.yml
+    PERMISSION_BOT_KEY_PATH: $PERMISSION_BOT_KEY
+    PERMIFROST_INTEGRATION_ALLOW_APPLY: "true"
+  script:
+    - pytest -v -m integration
+  rules:
+    - if: $PERMISSION_BOT_ACCOUNT == null
+      when: never
+    - if: $CI_COMMIT_BRANCH == "master"
+      when: manual
+      allow_failure: true
+    - when: never

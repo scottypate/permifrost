@@ -6,11 +6,13 @@ stages:
   - build-base
   - build-permifrost
   - test
+  - integration-test
   - publish
 
 include:
   - local: .gitlab/ci/global.gitlab-ci.yml
   - local: .gitlab/ci/test.gitlab-ci.yml
+  - local: .gitlab/ci/sandbox.gitlab-ci.yml
   - local: .gitlab/ci/publish.gitlab-ci.yml
   - local: .gitlab/ci/docker.gitlab-ci.yml
   - local: .gitlab/ci/docker_base.gitlab-ci.yml

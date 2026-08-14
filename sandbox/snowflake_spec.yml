@@ -1,0 +1,29 @@
+version: "1.0"
+
+# PLACEHOLDER. This spec must be rebuilt from an inventory of the target sandbox
+# account before the integration suite means anything -- `spec-test` fails on any
+# entity that does not exist on the server.
+#
+# See sandbox/README.md for what to cover. In particular include at least one
+# Catalog-Linked / Iceberg database with a genuinely lowercase schema name, since
+# that is the case issue #252 broke and no mocked test can reach.
+
+databases:
+  - permifrost_ci_db:
+      shared: no
+
+roles:
+  - permifrost_ci_reader:
+      warehouses:
+        - permifrost_ci_xs
+      privileges:
+        databases:
+          read:
+            - permifrost_ci_db
+        schemas:
+          read:
+            - permifrost_ci_db.public
+
+warehouses:
+  - permifrost_ci_xs:
+      size: x-small
