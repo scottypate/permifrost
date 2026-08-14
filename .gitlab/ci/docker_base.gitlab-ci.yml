@@ -9,22 +9,12 @@
     # branch names like `fix/some-bug`.
     - export IMAGE_TAG=$CI_COMMIT_REF_SLUG
 
-# the permifrost base should only be rebuild when the `requirements.txt` file
-# has a change, and should be inferable from the `BASE_SHA` environment
-# variable
+# Runs unconditionally: build-permifrost always builds FROM base:<ref_slug>, so
+# skipping this job when `requirements.txt` is unchanged leaves that tag missing
+# and fails the pipeline. `only: changes` appeared to work only because it
+# evaluates true on a branch's first push, when there is no diff to compute.
 
 # Manages:
-#  - gitlab-data/permifrost/base:<base_sha>
+#  - gitlab-data/permifrost/base:<ref_slug>
 permifrost_base:
   extends: .build_base
-  only:
-    changes:
-      - docker/base/Dockerfile
-      - requirements.txt
-
-# Manages:
-#  - gitlab-data/permifrost/base:<base_sha>
-permifrost_base_forks:
-  extends: .build_base
-  except:
-    - branches@gitlab-data/permifrost
