@@ -19,6 +19,9 @@ Changelog](http://keepachangelog.com/).
   
 ### Fixes
 
+- [#252](https://gitlab.com/gitlab-data/permifrost/-/issues/252)
+  - Fix Catalog-Linked Database schemas being granted and immediately revoked in
+    the same run
 - [#159](https://gitlab.com/gitlab-data/permifrost/-/merge_requests/159)
   - Fix lowercase schema and table references
 

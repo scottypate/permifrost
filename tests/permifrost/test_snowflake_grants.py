@@ -1579,6 +1579,79 @@ class TestGenerateSchemaGrants:
         assert schemas_list_sql == expected
 
 
+class TestCatalogLinkedDatabaseGrants:
+    """
+    Catalog-Linked Databases (Iceberg/Open Catalog) have case-sensitive object
+    names, so SHOW GRANTS returns the schema quoted while the spec refers to it
+    unquoted. Comparing those two forms directly made Permifrost both re-grant
+    and immediately revoke the same schema in a single run.
+    """
+
+    CLD_DATABASE = "atlan_context_store"
+    CLD_SCHEMA = "entity_history"
+
+    @pytest.fixture
+    def quoted_usage_grant(self):
+        return f'{self.CLD_DATABASE}."{self.CLD_SCHEMA}"'
+
+    @pytest.fixture
+    def unquoted_spec_schema(self):
+        return f"{self.CLD_DATABASE}.{self.CLD_SCHEMA}"
+
+    def test_quoted_grant_counts_as_already_granted(
+        self, mocker, quoted_usage_grant, unquoted_spec_schema
+    ):
+        mocker.patch.object(SnowflakeConnector, "__init__", lambda x: None)
+        generator = SnowflakeGrantsGenerator(
+            {"atlan_role": {"usage": {"schema": [quoted_usage_grant]}}},
+            {},
+        )
+
+        assert generator.is_granted_privilege(
+            "atlan_role", "usage", "schema", unquoted_spec_schema
+        )
+
+    def test_quoted_grant_is_not_revoked_when_in_spec(
+        self, mocker, quoted_usage_grant, unquoted_spec_schema
+    ):
+        mocker.patch.object(SnowflakeConnector, "__init__", lambda x: None)
+        generator = SnowflakeGrantsGenerator(
+            {"atlan_role": {"usage": {"schema": [quoted_usage_grant]}}},
+            {},
+        )
+
+        revokes = generator._generate_schema_revokes(
+            usage_schemas={quoted_usage_grant},
+            all_grant_schemas=[unquoted_spec_schema],
+            shared_dbs=set(),
+            spec_dbs=[self.CLD_DATABASE],
+            role="atlan_role",
+        )
+
+        assert revokes == []
+
+    def test_quoted_grant_absent_from_spec_is_still_revoked(
+        self, mocker, quoted_usage_grant
+    ):
+        mocker.patch.object(SnowflakeConnector, "__init__", lambda x: None)
+        generator = SnowflakeGrantsGenerator(
+            {"atlan_role": {"usage": {"schema": [quoted_usage_grant]}}},
+            {},
+        )
+
+        revokes = generator._generate_schema_revokes(
+            usage_schemas={quoted_usage_grant},
+            all_grant_schemas=[],
+            shared_dbs=set(),
+            spec_dbs=[self.CLD_DATABASE],
+            role="atlan_role",
+        )
+
+        assert [command["sql"] for command in revokes] == [
+            f"REVOKE usage ON schema {quoted_usage_grant} FROM ROLE atlan_role"
+        ]
+
+
 class TestGenerateDatabaseGrants:
     def single_r_database_config(mocker):
         """

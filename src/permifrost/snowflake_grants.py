@@ -75,9 +75,7 @@ class SnowflakeGrantsGenerator:
         normalized_entity = SnowflakeConnector.normalize_identifier(
             SnowflakeConnector.snowflaky(entity_name)
         )
-        normalized_grants = {
-            SnowflakeConnector.normalize_identifier(g) for g in grants
-        }
+        normalized_grants = {SnowflakeConnector.normalize_identifier(g) for g in grants}
 
         if normalized_entity in normalized_grants:
             return True
@@ -917,10 +915,13 @@ class SnowflakeGrantsGenerator:
             database_name = granted_schema.split(".")[0]
             normalized_db = SnowflakeConnector.normalize_identifier(database_name)
             future_schema_name = f"{database_name}.<schema>"
-            normalized_future = SnowflakeConnector.normalize_identifier(future_schema_name)
+            normalized_future = SnowflakeConnector.normalize_identifier(
+                future_schema_name
+            )
 
             if normalized_granted not in normalized_grant_schemas and (
-                normalized_db in normalized_shared_dbs or normalized_db not in normalized_spec_dbs
+                normalized_db in normalized_shared_dbs
+                or normalized_db not in normalized_spec_dbs
             ):
                 # No privileges to revoke on imported db. Done at database level
                 # Don't revoke on privileges on databases not defined in spec.
@@ -1620,7 +1621,9 @@ class SnowflakeGrantsGenerator:
         }
 
         for granted_resource in granted_resources:
-            normalized_granted = SnowflakeConnector.normalize_identifier(granted_resource)
+            normalized_granted = SnowflakeConnector.normalize_identifier(
+                granted_resource
+            )
             resource_split = granted_resource.split(".")
             database_name = resource_split[0]
             normalized_db = SnowflakeConnector.normalize_identifier(database_name)
@@ -1641,7 +1644,8 @@ class SnowflakeGrantsGenerator:
             normalized_future = SnowflakeConnector.normalize_identifier(future_resource)
 
             if normalized_granted not in normalized_grant_resources and (
-                normalized_db in normalized_shared_dbs or normalized_db not in normalized_spec_dbs
+                normalized_db in normalized_shared_dbs
+                or normalized_db not in normalized_spec_dbs
             ):
                 # No privileges to revoke on imported db. Done at database level
                 # Don't revoke on privileges on databases not defined in spec.

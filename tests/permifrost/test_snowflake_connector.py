@@ -90,52 +90,45 @@ class TestSnowflakeConnector:
         in SHOW GRANTS but unquoted in SHOW SCHEMAS. This function normalizes
         identifiers to a canonical form for comparison.
         """
-        # Basic lowercase conversion
+        # The Catalog-Linked Database mismatch this function exists to bridge:
+        # SHOW GRANTS quotes the schema, SHOW SCHEMAS does not.
         assert (
-            SnowflakeConnector.normalize_identifier("DATABASE_1.SCHEMA_1")
-            == "database_1.schema_1"
-        )
-
-        # Quoted schema names (Catalog-Linked Database format from SHOW GRANTS)
-        assert (
-            SnowflakeConnector.normalize_identifier('ATLAN_CONTEXT_STORE."entity_history"')
+            SnowflakeConnector.normalize_identifier(
+                'atlan_context_store."entity_history"'
+            )
             == "atlan_context_store.entity_history"
         )
         assert (
-            SnowflakeConnector.normalize_identifier('atlan_context_store."entity_history"')
+            SnowflakeConnector.normalize_identifier(
+                "atlan_context_store.entity_history"
+            )
             == "atlan_context_store.entity_history"
         )
 
-        # Unquoted schema names (standard format from SHOW SCHEMAS)
-        assert (
-            SnowflakeConnector.normalize_identifier("atlan_context_store.entity_history")
-            == "atlan_context_store.entity_history"
-        )
-
-        # Three-part identifiers (database.schema.table)
+        # Case is preserved, so a quoted mixed-case object does not collide with
+        # the unquoted (case-folded) object of the same spelling.
         assert (
             SnowflakeConnector.normalize_identifier('DB."Schema"."Table"')
-            == "db.schema.table"
+            == "DB.Schema.Table"
         )
-        assert (
-            SnowflakeConnector.normalize_identifier("DATABASE.SCHEMA.TABLE")
-            == "database.schema.table"
-        )
-
-        # Mixed case with quotes
         assert (
             SnowflakeConnector.normalize_identifier('PROD_DB."Mixed_Case_Schema"')
-            == "prod_db.mixed_case_schema"
+            == "PROD_DB.Mixed_Case_Schema"
+        )
+        assert SnowflakeConnector.normalize_identifier(
+            'database_1.schema_1."TableOne"'
+        ) != SnowflakeConnector.normalize_identifier("database_1.schema_1.tableone")
+
+        # Identifiers with no quotes to strip are returned unchanged
+        assert (
+            SnowflakeConnector.normalize_identifier("DATABASE_1.SCHEMA_1")
+            == "DATABASE_1.SCHEMA_1"
         )
 
         # Future grants format
         assert (
             SnowflakeConnector.normalize_identifier("database_1.<schema>")
             == "database_1.<schema>"
-        )
-        assert (
-            SnowflakeConnector.normalize_identifier("DATABASE_1.<TABLE>")
-            == "database_1.<table>"
         )
 
         # None handling
