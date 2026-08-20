@@ -277,6 +277,11 @@ class SnowflakeConnector:
         results = self.run_query(query).fetchall()
 
         for result in results:
+            # SHOW GRANTS TO USER also returns privilege grants that are not
+            # role grants (e.g. personal database USER$<name> objects), where
+            # the role column is NULL. Only role grants belong here.
+            if not result["role"]:
+                continue
             roles.append(SnowflakeConnector.snowflaky(result["role"]))
 
         return roles
