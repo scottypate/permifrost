@@ -24,6 +24,7 @@ class PrivilegeSchema(TypedDict):
     databases: ReadWriteSchema
     schemas: ReadWriteSchema
     tables: ReadWriteSchema
+    semantic_views: ReadWriteSchema
 
 
 class OwnsSchema(TypedDict):

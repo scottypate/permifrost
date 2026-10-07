@@ -108,6 +108,7 @@ SNOWFLAKE_SPEC_ROLE_SCHEMA = """
             - databases
             - schemas
             - tables
+            - semantic_views
         valuesrules:
             type: dict
             allowed:

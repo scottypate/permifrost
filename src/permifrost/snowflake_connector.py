@@ -204,6 +204,41 @@ class SnowflakeConnector:
 
         return names
 
+    def show_semantic_views(
+        self, database: Optional[str] = None, schema: Optional[str] = None
+    ) -> List[str]:
+        names = []
+
+        if schema:
+            query = f"SHOW SEMANTIC VIEWS IN SCHEMA {schema}"
+        elif database:
+            query = f"SHOW SEMANTIC VIEWS IN DATABASE {database}"
+        else:
+            query = "SHOW SEMANTIC VIEWS IN ACCOUNT"
+
+        results = self.run_query(query).fetchall()
+
+        for result in results:
+            identifier = (
+                f"{result['database_name']}.{result['schema_name']}.{result['name']}"
+            )
+            names.append(SnowflakeConnector.snowflaky(identifier))
+
+        return names
+
+    @staticmethod
+    def normalize_granted_on(granted_on: str) -> str:
+        """
+        Lowercase the object type of a SHOW [FUTURE] GRANTS row. Semantic views
+        may be reported as `SEMANTIC_VIEW` or `SEMANTIC VIEW`; both map to
+        `semantic_view` so they never collide with `view`/`table` and are
+        always found under the same key.
+        """
+        granted_on = granted_on.lower()
+        if granted_on.replace(" ", "_") == "semantic_view":
+            return "semantic_view"
+        return granted_on
+
     def show_future_grants(
         self, database: Optional[str] = None, schema: Optional[str] = None
     ) -> Dict[str, Dict[str, Dict[str, List[str]]]]:
@@ -222,7 +257,7 @@ class SnowflakeConnector:
             if result["grant_to"] == "ROLE":
                 role = result["grantee_name"].lower()
                 privilege = result["privilege"].lower()
-                granted_on = result["grant_on"].lower()
+                granted_on = self.normalize_granted_on(result["grant_on"])
 
                 future_grants.setdefault(role, {}).setdefault(privilege, {}).setdefault(
                     granted_on, []
@@ -244,7 +279,7 @@ class SnowflakeConnector:
 
         for result in results:
             privilege = result["privilege"].lower()
-            granted_on = result["granted_on"].lower()
+            granted_on = self.normalize_granted_on(result["granted_on"])
 
             grants.setdefault(privilege, {}).setdefault(granted_on, []).append(
                 SnowflakeConnector.snowflaky(result["name"])
@@ -260,7 +295,7 @@ class SnowflakeConnector:
 
         for result in results:
             privilege = result["privilege"].lower()
-            granted_on = result["granted_on"].lower()
+            granted_on = self.normalize_granted_on(result["granted_on"])
             grant_option = result["grant_option"].lower() == "true"
             name = SnowflakeConnector.snowflaky(result["name"])
 
@@ -409,8 +444,11 @@ class SnowflakeConnector:
                 new_name_parts.append(part)
 
             # If a future object, return in lower case - no need to quote
-            elif re.match("<(table|view|schema)>", part, re.IGNORECASE) is not None:
-                new_name_parts.append(part.lower())
+            elif (
+                re.match("<(table|view|schema|semantic[ _]view)>", part, re.IGNORECASE)
+                is not None
+            ):
+                new_name_parts.append(part.lower().replace(" ", "_"))
 
             # If does not meet requirements for unquoted object identifiers or collides with reserved keywords,
             # add double-quotes. See https://docs.snowflake.com/en/sql-reference/identifiers-syntax.html for what

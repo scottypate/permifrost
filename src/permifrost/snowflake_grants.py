@@ -23,6 +23,14 @@ REVOKE_FUTURE_PRIVILEGES_TEMPLATE = "REVOKE {privileges} ON FUTURE {resource_typ
 
 ALTER_USER_TEMPLATE = "ALTER USER {user_name} SET {privileges}"
 
+# SELECT to query a semantic view, REFERENCES so BI tools (e.g. Omni) can import it
+SEMANTIC_VIEW_READ_PRIVILEGES = "select, references"
+
+# Every privilege Snowflake defines on a semantic view that Permifrost manages.
+# `read` only grants the read set; MONITOR is never granted, but is revoked when
+# a managed role holds it without it being declared.
+SEMANTIC_VIEW_MANAGED_PRIVILEGES = "select, references, monitor"
+
 GRANT_OWNERSHIP_TEMPLATE = "GRANT OWNERSHIP ON {resource_type} {resource_name} TO ROLE {role_name} COPY CURRENT GRANTS"
 
 
@@ -366,6 +374,21 @@ class SnowflakeGrantsGenerator:
         )
         return table_commands
 
+    def _generate_semantic_view_commands(self, role, config, shared_dbs, spec_dbs):
+        semantic_views = config.get("privileges", {}).get("semantic_views", {})
+        read = semantic_views.get("read", [])
+
+        if len(read) == 0:
+            logger.debug(
+                "`privileges.semantic_views.read` not found for role {}, skipping generation of semantic views read level GRANT statements.".format(
+                    role
+                )
+            )
+
+        return self.generate_semantic_view_grants(
+            role=role, semantic_views=read, shared_dbs=shared_dbs, spec_dbs=spec_dbs
+        )
+
     def generate_grant_privileges_to_role(
         self, role: str, config: Dict[str, Any], shared_dbs: Set, spec_dbs: Set
     ) -> List[Dict]:
@@ -429,6 +452,11 @@ class SnowflakeGrantsGenerator:
             role, config, shared_dbs, spec_dbs
         )
         sql_commands.extend(table_commands)
+
+        semantic_view_commands = self._generate_semantic_view_commands(
+            role, config, shared_dbs, spec_dbs
+        )
+        sql_commands.extend(semantic_view_commands)
 
         return sql_commands
 
@@ -806,7 +834,8 @@ class SnowflakeGrantsGenerator:
         partial_write_privileges = (
             "monitor, create table,"
             " create view, create stage, create file format,"
-            " create sequence, create function, create pipe"
+            " create sequence, create function, create pipe,"
+            " create semantic view"
         )
         write_privileges = f"{read_privileges}, {partial_write_privileges}"
         write_privileges_array = write_privileges.split(", ")
@@ -955,7 +984,8 @@ class SnowflakeGrantsGenerator:
         partial_write_privileges = (
             "monitor, create table,"
             " create view, create stage, create file format,"
-            " create sequence, create function, create pipe"
+            " create sequence, create function, create pipe,"
+            " create semantic view"
         )
 
         # Get Schema Read Commands
@@ -1000,6 +1030,7 @@ class SnowflakeGrantsGenerator:
             "create file format",
             "create sequence",
             "create pipe",
+            "create semantic view",
         ]
 
         other_schema_grants = list()
@@ -1571,6 +1602,8 @@ class SnowflakeGrantsGenerator:
         Returns a list of REVOKE statements
         """
         sql_commands = []
+        # Future grants are keyed as `<semantic_view>` for multi-word types
+        future_type = resource_type.replace(" ", "_")
         for granted_resource in granted_resources:
             resource_split = granted_resource.split(".")
             database_name = resource_split[0]
@@ -1580,11 +1613,11 @@ class SnowflakeGrantsGenerator:
             if len(resource_split) == 2 or (
                 len(resource_split) == 3 and schema_name == "*"
             ):
-                future_resource = f"{database_name}.<{resource_type}>"
+                future_resource = f"{database_name}.<{future_type}>"
                 grouping_type = "database"
                 grouping_name = database_name
             else:
-                future_resource = f"{database_name}.{schema_name}.<{resource_type}>"
+                future_resource = f"{database_name}.{schema_name}.<{future_type}>"
                 grouping_type = "schema"
                 grouping_name = f"{database_name}.{schema_name}"
 
@@ -1757,6 +1790,132 @@ class SnowflakeGrantsGenerator:
             )
         )
         return sql_commands
+
+    def generate_semantic_view_grants(
+        self,
+        role: str,
+        semantic_views: List[str],
+        shared_dbs: Set,
+        spec_dbs: Set,
+    ) -> List[Dict]:
+        """
+        Generate the GRANT and REVOKE statements for semantic views, including
+        future grants. Semantic views are a distinct object type in Snowflake
+        and are handled completely separately from tables and views.
+
+        Only `read` exists: SELECT and REFERENCES are the only privileges
+        (besides OWNERSHIP, which Permifrost does not manage here) that apply
+        to a semantic view. REFERENCES is what lets a BI tool import it.
+
+        role: the name of the role the privileges are GRANTed to
+        semantic_views: the `privileges.semantic_views.read` entries, e.g.
+                        "analytics.finance.*" or "analytics.finance.arr_sv"
+        shared_dbs: a set of all the shared databases defined in the spec.
+        spec_dbs: a set of all the databases defined in the spec.
+
+        Returns the SQL commands generated as a List
+        """
+        sql_commands: List[Dict] = []
+        all_grants: List[str] = []
+        conn = SnowflakeConnector()
+
+        for semantic_view in semantic_views:
+            name_parts = semantic_view.split(".")
+            database_name = name_parts[0]
+            schema_name = name_parts[1]
+            view_name = name_parts[2]
+
+            if database_name in shared_dbs:
+                continue
+
+            fetched_schemas = conn.full_schema_list(f"{database_name}.{schema_name}")
+            existing = []
+            for schema in fetched_schemas:
+                existing.extend(conn.show_semantic_views(schema=schema))
+
+            if schema_name == "*" and view_name == "*":
+                future_database = f"{database_name}.<semantic_view>"
+                all_grants.append(future_database)
+                sql_commands.extend(
+                    self._semantic_view_group_grants(
+                        role, "database", database_name, future_database
+                    )
+                )
+
+            if view_name == "*":
+                all_grants.extend(existing)
+                for schema in fetched_schemas:
+                    future_schema = f"{schema}.<semantic_view>"
+                    all_grants.append(future_schema)
+                    sql_commands.extend(
+                        self._semantic_view_group_grants(
+                            role, "schema", schema, future_schema
+                        )
+                    )
+            elif semantic_view in existing:
+                all_grants.append(semantic_view)
+                sql_commands.append(
+                    {
+                        "already_granted": self._semantic_view_granted(
+                            role, semantic_view
+                        ),
+                        "sql": GRANT_PRIVILEGES_TEMPLATE.format(
+                            privileges=SEMANTIC_VIEW_READ_PRIVILEGES,
+                            resource_type="semantic view",
+                            resource_name=SnowflakeConnector.snowflaky(semantic_view),
+                            role=SnowflakeConnector.snowflaky_user_role(role),
+                        ),
+                    }
+                )
+
+        # REVOKES: one pass per privilege so only held privileges are revoked
+        for privilege in SEMANTIC_VIEW_MANAGED_PRIVILEGES.split(", "):
+            granted_resources = list(
+                set(
+                    self.grants_to_role.get(role, {})
+                    .get(privilege, {})
+                    .get("semantic_view", [])
+                )
+            )
+            sql_commands.extend(
+                self._generate_revoke_select_privs(
+                    role=role,
+                    all_grant_resources=all_grants,
+                    shared_dbs=shared_dbs,
+                    spec_dbs=spec_dbs,
+                    privilege_set=privilege,
+                    resource_type="semantic view",
+                    granted_resources=granted_resources,
+                )
+            )
+        return sql_commands
+
+    def _semantic_view_granted(self, role: str, name: str) -> bool:
+        return all(
+            self.is_granted_privilege(role, privilege, "semantic_view", name)
+            for privilege in SEMANTIC_VIEW_READ_PRIVILEGES.split(", ")
+        )
+
+    def _semantic_view_group_grants(
+        self, role: str, grouping_type: str, grouping_name: str, future_name: str
+    ) -> List[Dict]:
+        already_granted = self._semantic_view_granted(role, future_name)
+        return [
+            {
+                "already_granted": already_granted,
+                "sql": template.format(
+                    privileges=SEMANTIC_VIEW_READ_PRIVILEGES,
+                    resource_type="semantic view",
+                    grouping_type=grouping_type,
+                    grouping_name=SnowflakeConnector.snowflaky(grouping_name),
+                    role=SnowflakeConnector.snowflaky_user_role(role),
+                ),
+            }
+            for template in (
+                GRANT_FUTURE_PRIVILEGES_TEMPLATE,
+                GRANT_ALL_PRIVILEGES_TEMPLATE,
+            )
+        ]
 
     def generate_alter_user(self, user: str, config: Dict[str, Any]) -> List[Dict]:
         """

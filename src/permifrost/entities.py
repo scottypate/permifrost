@@ -12,6 +12,7 @@ class EntitySchema(TypedDict):
     schema_refs: Set[str]
     table_refs: Set[str]
     tables_by_database: Dict
+    semantic_view_refs: Set[str]
     roles: Set[str]
     role_refs: Set[str]
     users: Set[str]
@@ -32,6 +33,7 @@ class EntityGenerator:
             "schema_refs": set(),
             "table_refs": set(),
             "tables_by_database": dict(),
+            "semantic_view_refs": set(),
             "roles": set(),
             "role_refs": set(),
             "users": set(),
@@ -163,6 +165,7 @@ class EntityGenerator:
 
         self.generate_implicit_refs_from_schemas()
         self.generate_implicit_refs_from_tables()
+        self.generate_implicit_refs_from_semantic_views()
         self.group_table_by_database()
         # Add implicit references to DBs and Schemas.
         #  e.g. RAW.MYSCHEMA.TABLE references also DB RAW and Schema MYSCHEMA
@@ -184,6 +187,16 @@ class EntityGenerator:
                 self.entities["database_refs"].add(name_parts[0])
 
             if name_parts[1] != "*":
+                self.entities["schema_refs"].add(f"{name_parts[0]}.{name_parts[1]}")
+
+    def generate_implicit_refs_from_semantic_views(self):
+        """Adds implicit db/schema refs from semantic views"""
+        for semantic_view in self.entities["semantic_view_refs"]:
+            name_parts = semantic_view.split(".")
+            if name_parts[0] != "*":
+                self.entities["database_refs"].add(name_parts[0])
+
+            if len(name_parts) > 1 and name_parts[1] != "*":
                 self.entities["schema_refs"].add(f"{name_parts[0]}.{name_parts[1]}")
 
     def ensure_valid_entity_names(self, entities: EntitySchema) -> List[str]:
@@ -222,6 +235,20 @@ class EntityGenerator:
                     f"Name error: Not a valid table name: {table}"
                     " (Can't have a Table name after selecting all schemas"
                     " with *: DB.SCHEMA.[TABLE | *])"
+                )
+
+        for semantic_view in entities["semantic_view_refs"]:
+            name_parts = semantic_view.split(".")
+            if (not len(name_parts) == 3) or (name_parts[0] == "*"):
+                error_messages.append(
+                    f"Name error: Not a valid semantic view name: {semantic_view}"
+                    " (Proper definition: DB.[SCHEMA | *].[SEMANTIC_VIEW | *])"
+                )
+            elif name_parts[1] == "*" and name_parts[2] != "*":
+                error_messages.append(
+                    f"Name error: Not a valid semantic view name: {semantic_view}"
+                    " (Can't have a semantic view name after selecting all"
+                    " schemas with *: DB.SCHEMA.[SEMANTIC_VIEW | *])"
                 )
 
         return error_messages
@@ -472,6 +499,28 @@ class EntityGenerator:
                 )
             )
 
+    def generate_semantic_view_roles(self, config, role_name):
+        read_databases, _ = self.generate_read_write_database_names(config)
+        semantic_views = config.get("privileges", {}).get("semantic_views", {})
+
+        if "write" in semantic_views:
+            # SELECT and REFERENCES are the only grantable privileges besides
+            # OWNERSHIP, so there is nothing for `write` to mean.
+            self.error_messages.append(
+                "Privilege Error: `privileges.semantic_views.write` is not "
+                f"supported (role {role_name}); use `read`"
+            )
+
+        for semantic_view in semantic_views.get("read", []):
+            self.entities["semantic_view_refs"].add(semantic_view)
+            view_db = semantic_view.split(".")[0]
+            if view_db not in read_databases:
+                self.error_messages.append(
+                    f"Privilege Error: Database {view_db} referenced in "
+                    "semantic view read privileges but not in database "
+                    f"privileges for role {role_name}"
+                )
+
     def generate_ownership_roles(self, config, role_name):
         try:
             for schema in config["owns"]["databases"]:
@@ -519,6 +568,7 @@ class EntityGenerator:
                 self.generate_database_roles(config, role_name)
                 self.generate_schema_roles(config, role_name)
                 self.generate_table_roles(config, role_name)
+                self.generate_semantic_view_roles(config, role_name)
                 self.generate_ownership_roles(config, role_name)
 
     def generate_user_fn(self, config, key, ref, user_name):

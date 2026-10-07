@@ -165,6 +165,27 @@ class SnowflakeSpecLoader:
             logger.debug("`tables` not found in spec, skipping SHOW TABLES/VIEWS call.")
         return error_messages
 
+    def check_semantic_view_ref_entities(self, conn):
+        """
+        Warn (never fail) about named semantic views that do not exist yet.
+        They are created by dbt, which runs after Permifrost, so a hard error
+        would deadlock the first deploy. The grant generator skips missing
+        views; prefer `db.schema.*` entries so the future grant covers them.
+        """
+        if len(self.entities["semantic_view_refs"]) > 0:
+            existing = conn.show_semantic_views()
+            for semantic_view in self.entities["semantic_view_refs"]:
+                if "*" not in semantic_view and semantic_view not in existing:
+                    logger.warning(
+                        f"Semantic view {semantic_view} was not found on Snowflake"
+                        " Server; skipping its grant until it is created."
+                    )
+        else:
+            logger.debug(
+                "`semantic_views` not found in spec, skipping SHOW SEMANTIC VIEWS call."
+            )
+        return []
+
     def check_role_entities(self, conn):
         error_messages = []
         if len(self.entities["roles"]) > 0:
@@ -222,6 +243,7 @@ class SnowflakeSpecLoader:
         error_messages.extend(self.check_database_entities(conn))
         error_messages.extend(self.check_schema_ref_entities(conn))
         error_messages.extend(self.check_table_ref_entities(conn))
+        error_messages.extend(self.check_semantic_view_ref_entities(conn))
         error_messages.extend(self.check_role_entities(conn))
         error_messages.extend(self.check_users_entities(conn))
 

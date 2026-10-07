@@ -16,6 +16,9 @@ Changelog](http://keepachangelog.com/).
   - Account for null values from snowflake user dbs
 - [#229](https://gitlab.com/gitlab-data/permifrost/-/issues/229)
   - User TYPE management
+- Semantic view grants
+  - New `privileges.semantic_views.read` (select, references; ALL and FUTURE for wildcards, with revokes)
+  - `create semantic view` added to the schema `write` privileges
   
 ### Fixes
 

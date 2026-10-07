@@ -124,9 +124,11 @@ Please find below the links between Permifrost permissions and Snowflake grants.
 | Databases | read                   | usage                                                                                                               |
 |           | write                  | monitor, create schema                                                                                              |
 | Schemas   | read                   | usage                                                                                                               |
-|           | write                  | monitor, create table, create view, create stage, create file format, create sequence, create function, create pipe |
+|           | write                  | monitor, create table, create view, create stage, create file format, create sequence, create function, create pipe, create semantic view |
 | Table     | read                   | select                                                                                                              |
 |           | write                  | insert, update, delete, truncate, references                                                                        |
+| Semantic views | read              | select, references                                                                                                  |
+|           | write                  | not supported (rejected by the spec check)                                                                          |
 
 
 Tables and views are listed under `tables` and handled properly behind the
@@ -136,6 +138,30 @@ If `*` is provided as the parameter for tables the grant statement will use the
 `ALL <object_type>s in SCHEMA` syntax. It will also grant to future tables and
 views. See Snowflake documentation for [`ON
 FUTURE`](https://docs.snowflake.net/manuals/sql-reference/sql/grant-privilege.html#optional-parameters)
+
+Semantic views are a separate object type and are listed under
+`semantic_views`, not `tables`. Only `read` exists: `select` and `references`
+are the only privileges (besides `ownership`) Snowflake defines on a semantic
+view, and `references` is what lets a BI tool such as Omni import it. The path
+grammar is the same as for tables; `db.schema.*` grants `ALL` and `FUTURE`
+semantic views in the schema and `db.*.*` does the same at database level.
+Grants not in the spec are revoked (including `monitor`, which is never
+granted). Prefer wildcard entries (`db.schema.*`) so grants survive rebuilds
+via the future grant; a named view that does not exist yet is skipped with a
+warning rather than failing the run.
+
+```yaml
+roles:
+  - bi_reader:
+      privileges:
+        databases:
+          read:
+            - analytics
+        semantic_views:
+          read:
+            - analytics.finance.*
+            - analytics.marts.arr_semantic_view
+```
 
 If a schema name includes an asterisk (prefix or suffix), such as `snowplow_*` or `*_snowplow`, then all schemas
 that match this pattern will be included in the grant statement _unless it is

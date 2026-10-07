@@ -8,7 +8,6 @@ from permifrost.snowflake_grants import SnowflakeGrantsGenerator
 from permifrost_test_utils.snowflake_schema_builder import SnowflakeSchemaBuilder
 from permifrost_test_utils.snowflake_connector import MockSnowflakeConnector
 
-
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 SPEC_FILE_DIR = os.path.join(THIS_DIR, "specs")
 SCHEMA_FILE_DIR = os.path.join(THIS_DIR, "schemas")
@@ -661,6 +660,69 @@ class TestSnowflakeSpecLoader:
             SnowflakeSpecLoader("", mock_connector)
 
         assert expected_error in str(context.value)
+
+    @pytest.mark.parametrize(
+        "existing, warns",
+        [(["database_1.schema_1.arr_sv"], False), ([], True)],
+    )
+    def test_missing_semantic_view_warns_but_does_not_fail(
+        self, existing, warns, mocker, caplog, monkeypatch
+    ):
+        spec = """
+databases:
+  - database_1:
+      shared: no
+roles:
+  - testrole:
+      member_of: [testrole]
+      privileges:
+        databases:
+          read: [database_1]
+        semantic_views:
+          read: [database_1.schema_1.arr_sv]
+"""
+        mocker.patch("builtins.open", mocker.mock_open(read_data=spec))
+        for key in ("USER", "PASSWORD", "ACCOUNT", "DATABASE", "ROLE", "WAREHOUSE"):
+            monkeypatch.setenv(f"PERMISSION_BOT_{key}", "TEST")
+        mocker.patch("sqlalchemy.create_engine")
+        mock_connector = MockSnowflakeConnector()
+        mocker.patch.object(
+            mock_connector, "show_databases", return_value=["database_1"]
+        )
+        mocker.patch.object(
+            mock_connector, "show_schemas", return_value=["database_1.schema_1"]
+        )
+        mocker.patch.object(
+            mock_connector, "show_roles", return_value={"testrole": "securityadmin"}
+        )
+        mocker.patch.object(
+            SnowflakeConnector, "show_semantic_views", return_value=existing
+        )
+        mocker.patch.object(
+            mock_connector, "show_semantic_views", return_value=existing
+        )
+        with caplog.at_level("WARNING"):
+            SnowflakeSpecLoader("", mock_connector)
+        found = "Semantic view database_1.schema_1.arr_sv was not found" in caplog.text
+        assert found is warns
+
+    def test_malformed_semantic_view_name_still_fails(self, mocker, mock_connector):
+        spec = """
+databases:
+  - database_1:
+      shared: no
+roles:
+  - testrole:
+      member_of: [testrole]
+      privileges:
+        databases:
+          read: [database_1]
+        semantic_views:
+          read: [database_1.schema_1]
+"""
+        mocker.patch("builtins.open", mocker.mock_open(read_data=spec))
+        with pytest.raises(SpecLoadingError, match="semantic view name"):
+            SnowflakeSpecLoader("", mock_connector)
 
     def test_remove_duplicate_queries(self):
         sql_command_1 = {"sql": "GRANT OWNERSHIP ON SCHEMA PIZZA TO ROLE LIZZY"}
@@ -1457,7 +1519,7 @@ class TestSpecFileLoading:
             "GRANT usage ON schema database_1.write_schema TO ROLE test_role",
             "GRANT usage ON warehouse warehouse_1 TO ROLE test_role",
             "GRANT usage, monitor, create schema ON database database_1 TO ROLE test_role",
-            "GRANT usage, monitor, create table, create view, create stage, create file format, create sequence, create function, create pipe ON schema database_1.write_schema TO ROLE test_role",
+            "GRANT usage, monitor, create table, create view, create stage, create file format, create sequence, create function, create pipe, create semantic view ON schema database_1.write_schema TO ROLE test_role",
         ]
 
         mocker.patch.object(SnowflakeConnector, "show_views", return_value=[])
