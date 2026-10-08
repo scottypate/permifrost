@@ -13,6 +13,7 @@ class EntitySchema(TypedDict):
     table_refs: Set[str]
     tables_by_database: Dict
     semantic_view_refs: Set[str]
+    database_role_refs: Set[str]
     roles: Set[str]
     role_refs: Set[str]
     users: Set[str]
@@ -34,6 +35,7 @@ class EntityGenerator:
             "table_refs": set(),
             "tables_by_database": dict(),
             "semantic_view_refs": set(),
+            "database_role_refs": set(),
             "roles": set(),
             "role_refs": set(),
             "users": set(),
@@ -251,6 +253,14 @@ class EntityGenerator:
                     " schemas with *: DB.SCHEMA.[SEMANTIC_VIEW | *])"
                 )
 
+        for database_role in entities["database_role_refs"]:
+            name_parts = database_role.split(".")
+            if (not len(name_parts) == 2) or "*" in database_role:
+                error_messages.append(
+                    f"Name error: Not a valid database role name: {database_role}"
+                    " (Proper definition: DB.DATABASE_ROLE)"
+                )
+
         return error_messages
 
     def ensure_valid_references(self, entities: EntitySchema) -> List[str]:
@@ -411,6 +421,23 @@ class EntityGenerator:
                 )
             )
 
+    def generate_database_role_refs(self, config, role_name):
+        """
+        Collect the `database_roles` declared for a role. The database part is
+        deliberately NOT added to `database_refs`: database roles usually live
+        in Snowflake-owned databases (e.g. SNOWFLAKE) that the spec does not
+        define and Permifrost must not start managing.
+        """
+        try:
+            for database_role in config["database_roles"]:
+                self.entities["database_role_refs"].add(database_role)
+        except KeyError:
+            logger.debug(
+                "`database_roles` not found for role {}, skipping Database Role Reference generation.".format(
+                    role_name
+                )
+            )
+
     def generate_read_write_database_names(self, config):
         read_databases = (
             config.get("privileges", {}).get("databases", {}).get("read", [])
@@ -566,6 +593,7 @@ class EntityGenerator:
                 self.generate_warehouse_roles(config, role_name)
                 self.generate_integration_roles(config, role_name)
                 self.generate_database_roles(config, role_name)
+                self.generate_database_role_refs(config, role_name)
                 self.generate_schema_roles(config, role_name)
                 self.generate_table_roles(config, role_name)
                 self.generate_semantic_view_roles(config, role_name)

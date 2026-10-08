@@ -19,6 +19,16 @@ Changelog](http://keepachangelog.com/).
 - Semantic view grants
   - New `privileges.semantic_views.read` (select, references; ALL and FUTURE for wildcards, with revokes)
   - `create semantic view` added to the schema `write` privileges
+- Database role grants
+  - New role key `database_roles: [db.database_role]` (`GRANT/REVOKE DATABASE ROLE ... TO/FROM ROLE`)
+  - **BREAKING**: for every role declared in the spec, `database_roles` is the
+    complete set. Database roles the role holds that are not listed are revoked
+    in any database, and a missing key means `[]`. Existing specs will start
+    revoking database roles held by their roles (e.g. `SNOWFLAKE.CORTEX_USER`);
+    declare them before upgrading. Roles only referenced in the spec, or not in
+    it, are untouched.
+  - The spec check fails when a listed database role does not exist or cannot be
+    listed by `securityadmin`
   
 ### Fixes
 

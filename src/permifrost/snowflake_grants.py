@@ -21,6 +21,10 @@ GRANT_FUTURE_PRIVILEGES_TEMPLATE = "GRANT {privileges} ON FUTURE {resource_type}
 
 REVOKE_FUTURE_PRIVILEGES_TEMPLATE = "REVOKE {privileges} ON FUTURE {resource_type}s IN {grouping_type} {grouping_name} FROM ROLE {role}"
 
+GRANT_DATABASE_ROLE_TEMPLATE = "GRANT DATABASE ROLE {database_role} TO ROLE {role}"
+
+REVOKE_DATABASE_ROLE_TEMPLATE = "REVOKE DATABASE ROLE {database_role} FROM ROLE {role}"
+
 ALTER_USER_TEMPLATE = "ALTER USER {user_name} SET {privileges}"
 
 # SELECT to query a semantic view, REFERENCES so BI tools (e.g. Omni) can import it
@@ -296,6 +300,57 @@ class SnowflakeGrantsGenerator:
             sql_commands.extend(
                 self._generate_revoke_sql_commands_for_role(entity, member_of_list)
             )
+            # After the member_of statements, and inside the ignore_memberships
+            # early return above: database role grants are memberships too.
+            sql_commands.extend(self.generate_database_role_grants(entity, config))
+
+        return sql_commands
+
+    def generate_database_role_grants(
+        self, role: str, config: Dict[str, Any]
+    ) -> List[Dict]:
+        """
+        Generate GRANT/REVOKE DATABASE ROLE statements for a declared role.
+
+        The `database_roles` list is the complete set the role should hold:
+        every declared entry is granted (flagged `already_granted` when held)
+        and every database role the role holds that is not declared is revoked,
+        in any database. A missing key is an empty list.
+
+        role: the declared role
+        config: the subtree for the role as specified in the spec
+        """
+        declared = [
+            SnowflakeConnector.snowflaky(database_role)
+            for database_role in config.get("database_roles", [])
+        ]
+        grantee = SnowflakeConnector.snowflaky_user_role(role)
+        sql_commands: List[Dict] = []
+
+        for database_role in declared:
+            sql_commands.append(
+                {
+                    "already_granted": self.is_granted_privilege(
+                        role, "usage", "database_role", database_role
+                    ),
+                    "sql": GRANT_DATABASE_ROLE_TEMPLATE.format(
+                        database_role=database_role, role=grantee
+                    ),
+                }
+            )
+
+        for held in (
+            self.grants_to_role.get(role, {}).get("usage", {}).get("database_role", [])
+        ):
+            if held not in declared:
+                sql_commands.append(
+                    {
+                        "already_granted": False,
+                        "sql": REVOKE_DATABASE_ROLE_TEMPLATE.format(
+                            database_role=held, role=grantee
+                        ),
+                    }
+                )
 
         return sql_commands
 

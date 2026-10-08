@@ -186,6 +186,43 @@ class SnowflakeSpecLoader:
             )
         return []
 
+    def check_database_role_entities(self, conn):
+        """
+        Fail if a declared database role does not exist (or cannot be seen).
+        Unlike semantic views, database roles in Snowflake-owned databases
+        (e.g. SNOWFLAKE.CORTEX_USER) are not created by a later deploy step, so
+        a missing one is a spec error, not something to wait for.
+        """
+        error_messages = []
+        refs = self.entities["database_role_refs"]
+        if len(refs) > 0:
+            # One SHOW per database, not per database role
+            refs_by_database: Dict[str, List[str]] = {}
+            for database_role in sorted(refs):
+                database = database_role.split(".")[0]
+                refs_by_database.setdefault(database, []).append(database_role)
+
+            for database, database_roles in refs_by_database.items():
+                try:
+                    existing = conn.show_database_roles(database)
+                except Exception as exc:
+                    error_messages.append(
+                        f"Missing Entity Error: database roles in {database}"
+                        f" not visible to securityadmin: {exc}"
+                    )
+                    continue
+                for database_role in database_roles:
+                    if SnowflakeConnector.snowflaky(database_role) not in existing:
+                        error_messages.append(
+                            f"Missing Entity Error: Database role {database_role}"
+                            " was not found on Snowflake Server."
+                        )
+        else:
+            logger.debug(
+                "`database_roles` not found in spec, skipping SHOW DATABASE ROLES call."
+            )
+        return error_messages
+
     def check_role_entities(self, conn):
         error_messages = []
         if len(self.entities["roles"]) > 0:
@@ -227,7 +264,7 @@ class SnowflakeSpecLoader:
         self, conn: Optional[SnowflakeConnector] = None
     ) -> None:
         """
-        Make sure that all [warehouses, integrations, dbs, schemas, tables, users, roles]
+        Make sure that all [warehouses, integrations, dbs, schemas, tables, database roles, users, roles]
         referenced in the spec are defined in Snowflake.
 
         Raises a SpecLoadingError with all the errors found while checking
@@ -244,6 +281,7 @@ class SnowflakeSpecLoader:
         error_messages.extend(self.check_schema_ref_entities(conn))
         error_messages.extend(self.check_table_ref_entities(conn))
         error_messages.extend(self.check_semantic_view_ref_entities(conn))
+        error_messages.extend(self.check_database_role_entities(conn))
         error_messages.extend(self.check_role_entities(conn))
         error_messages.extend(self.check_users_entities(conn))
 
@@ -402,6 +440,11 @@ class SnowflakeSpecLoader:
             return [item for item in filter_set if item in integration_refs]
         # Ignore account since currently account grants are not handled
         elif grant_on == "account":
+            return filter_set
+        # Database roles usually live in databases the spec does not define
+        # (e.g. SNOWFLAKE.CORTEX_USER). Keep every row so undeclared ones can
+        # be revoked; the `database_roles` generator does the matching.
+        elif grant_on == "database_role":
             return filter_set
         else:
             # Everything else should be binary: it has a dot or it doesn't

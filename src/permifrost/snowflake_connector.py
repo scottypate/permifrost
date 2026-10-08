@@ -226,17 +226,33 @@ class SnowflakeConnector:
 
         return names
 
+    def show_database_roles(self, database: str) -> List[str]:
+        """
+        List the database roles in a database as `<database>.<name>`. SHOW
+        DATABASE ROLES returns unqualified names, so the database is prefixed.
+        """
+        query = f"SHOW DATABASE ROLES IN DATABASE {database}"
+        results = self.run_query(query).fetchall()
+
+        return [
+            SnowflakeConnector.snowflaky(f"{database}.{result['name']}")
+            for result in results
+        ]
+
     @staticmethod
     def normalize_granted_on(granted_on: str) -> str:
         """
         Lowercase the object type of a SHOW [FUTURE] GRANTS row. Semantic views
         may be reported as `SEMANTIC_VIEW` or `SEMANTIC VIEW`; both map to
         `semantic_view` so they never collide with `view`/`table` and are
-        always found under the same key.
+        always found under the same key. Likewise `DATABASE_ROLE` /
+        `DATABASE ROLE` map to `database_role`, apart from account `role`.
         """
         granted_on = granted_on.lower()
         if granted_on.replace(" ", "_") == "semantic_view":
             return "semantic_view"
+        if granted_on.replace(" ", "_") == "database_role":
+            return "database_role"
         return granted_on
 
     def show_future_grants(

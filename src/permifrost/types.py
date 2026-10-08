@@ -43,6 +43,7 @@ class RoleSchemaBase(TypedDict):
 
 class RoleSchema(RoleSchemaBase, total=False):
     owner: str
+    database_roles: List[str]
 
 
 class UserSchemaBase(TypedDict):

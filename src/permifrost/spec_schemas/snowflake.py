@@ -82,6 +82,10 @@ SNOWFLAKE_SPEC_ROLE_SCHEMA = """
         type: list
         schema:
             type: string
+    database_roles:
+        type: list
+        schema:
+            type: string
     member_of:
         anyof:
             - type: dict

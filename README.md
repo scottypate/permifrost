@@ -163,6 +163,48 @@ roles:
             - analytics.marts.arr_semantic_view
 ```
 
+### Database roles
+
+`database_roles` grants Snowflake database roles (for example
+`SNOWFLAKE.CORTEX_USER`) to a role. It is valid on roles only; the user schema
+rejects it. Names are `db.database_role`: exactly two parts, no `*`.
+
+```yaml
+roles:
+  - ar_dbr_snowflake_cortex_user:
+      database_roles:
+        - snowflake.cortex_user
+```
+
+This generates `GRANT DATABASE ROLE snowflake.cortex_user TO ROLE
+ar_dbr_snowflake_cortex_user`, and `REVOKE DATABASE ROLE ... FROM ROLE ...` for
+anything the role holds that is not listed.
+
+- The list is the complete set. A role declared in the spec has every
+  undeclared database role revoked, in any database. A missing `database_roles`
+  key is the same as `[]`, so existing specs start revoking database roles
+  their roles hold. This is a breaking change.
+- Roles only referenced in the spec (for example in a `member_of`) and roles not
+  in the spec (`accountadmin`, `public`) are never touched, unless declared.
+- Database roles are memberships: `--ignore-memberships` skips them, and their
+  statements come after the role `member_of` grants and revokes.
+- The database part is not added to the spec's database references, so the
+  database (`snowflake`) is not treated as referenced-but-undefined and is not
+  managed by Permifrost.
+- Names must match the server's exactly: `snowflake.cortex_analyst_user` is the
+  same as `snowflake.CORTEX_ANALYST_USER`, but a quoted name must be quoted in
+  the server's case.
+- Names with a dot inside the quotes (for example
+  `snowflake."CORTEX-MODEL-ROLE-GEMINI-2.5-FLASH"`) are not supported, a
+  limitation of the identifier handling.
+- The spec check fails if a listed database role does not exist, or if
+  `SHOW DATABASE ROLES IN DATABASE <db>` cannot be run as `securityadmin`. That
+  statement does not list every database role a role may hold (for example
+  `SNOWFLAKE.PUBLIC` and `SNOWFLAKE."CORTEX-MODEL-ROLE-ALL"` are held by
+  `PUBLIC` but not listed), so such a role cannot be declared yet.
+- A role needs a non-empty config in the spec to be processed at all, as for
+  `member_of`.
+
 If a schema name includes an asterisk (prefix or suffix), such as `snowplow_*` or `*_snowplow`, then all schemas
 that match this pattern will be included in the grant statement _unless it is
 for ownership_, in which case the asterisk is not supported. This can be coupled
@@ -262,6 +304,10 @@ roles:
                     - database_name.*_schema_partial.*
                     - database_name.schema_name.table_name
                     ...
+
+        database_roles:
+            - database_name.database_role_name
+            ...
 
         owns:
             databases:
